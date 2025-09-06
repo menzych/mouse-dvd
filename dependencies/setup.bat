@@ -5,3 +5,4 @@ pause
 color a
 clr
 print("Dependencies sucsesfully instaled")
+pause
