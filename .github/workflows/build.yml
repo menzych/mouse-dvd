@@ -1,83 +1,61 @@
-name: Build and Test Project
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+name: Project Autobuild
+run-name: ProjectAutobuilder
+on: [push]
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13.7"
-      - name: Install Lint/Test tools
-        run: pip install flake8 pytest
-      - name: Lint
-        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-      - name: Run Tests
-        run: pytest
+    - name: Checkout repository
+      uses: actions/checkout@v4
+  
+    - name: Set up Python 3.13.7
+      uses: actions/setup-python@v5 
+      with:
+        python-version: "3.13.7"
+        architecture: "arm64"
+        cache: "pip"
+  
+    - name: Install Requirements
+      run: "pip install -r requirements.txt"
 
-  build:
-    needs: lint-and-test
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            artifact_name: windows_amd64
-            arch: x64
-          - os: macos-latest
-            artifact_name: macOS_arm64
-            arch: arm64
-          - os: ubuntu-latest
-            artifact_name: linux_amd64
-            arch: x64
+    - name: Compile Project
+      run: 'python -m nuitka --mode=app --output-dir="output" --output-filename="${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}" --deployment dvd-mouse.pyw'
 
-    runs-on: ${{ matrix.os }}
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: ${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}
+        path: output/**
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Delete garbage
+      run: 'rm -rf output/'
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13.7"
-          architecture: ${{ matrix.arch }}
-          cache: "pip"
-
-      - name: Install Requirements
-        run: |
-          pip install -r requirements.txt
-          pip install nuitka
-
-      - name: Compile Project
-        run: python -m nuitka --mode=onefile --output-dir=output --output-filename=${{ matrix.artifact_name }}_${{ github.sha }} --deployment dvd-mouse.pyw
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}_bin
-          path: output/
-
-  notify:
-    needs: build
+  Build-Linux:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Send Telegram notification
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          message: |
-            📢 *CI/CD Report*
-            📦 Проект: ${{ github.repository }}
-            🚀 Статус: ${{ needs.build.result == 'success' && '✅ Все сборки готовы' || '❌ Произошла ошибка' }}
-            👤 Автор: ${{ github.actor }}
-            🔗 [Логи сборки](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          format: markdown
+    - name: Checkout repository
+      uses: actions/checkout@v4
+  
+    - name: Set up Python 3.13.7
+      uses: actions/setup-python@v5 
+      with:
+        python-version: "3.13.7"
+        architecture: "x64"
+        cache: "pip"
+  
+    - name: Install Requirements
+      run: "pip install -r requirements.txt"
+
+    - name: Compile Project
+      run: 'python -m nuitka --mode=onefile --output-dir="output" --output-filename="${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}" --deployment dvd-mouse.pyw'
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: ${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}
+        path: output/${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}
+
+    - name: Delete garbage
+      run: 'rm "${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}"'
