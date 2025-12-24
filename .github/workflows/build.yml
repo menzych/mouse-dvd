@@ -1,19 +1,6 @@
-name: Build and Test Project
-
-    - name: Compile Project
-      run: 'python -m nuitka --mode=onefile --output-dir="output" --output-filename="${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}" --assume-yes-for-downloads --deployment dvd-mouse.pyw '
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: ${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}
-        path: output/${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}
-
-    - name: Delete garbage
-      run: 'rm "output\${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}.exe"'
-
-  Build-MacOS:
-    runs-on: macos-latest
+name: Project Autobuild
+run-name: ProjectAutobuilder
+on: [push]
 
 jobs:
   lint-and-test:
