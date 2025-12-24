@@ -1,23 +1,4 @@
-name: Build Project
-run-name: Project AutoBuilder
-on: [pull_request, push]
-jobs:
-  Build-Windows:
-    runs-on: windows-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.13.7
-      uses: actions/setup-python@v5 
-      with:
-        python-version: "3.13.7"
-        architecture: "x64"
-        cache: "pip"
-
-    - name: Install Requirements
-      run: "pip install -r requirements.txt"
+name: Build and Test Project
 
     - name: Compile Project
       run: 'python -m nuitka --mode=onefile --output-dir="output" --output-filename="${{ runner.os }}_${{ runner.arch }}_${{ github.sha }}" --assume-yes-for-downloads --deployment dvd-mouse.pyw '
@@ -34,6 +15,9 @@ jobs:
   Build-MacOS:
     runs-on: macos-latest
 
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -62,7 +46,7 @@ jobs:
 
   Build-Linux:
     runs-on: ubuntu-latest
-
+    if: always()
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
