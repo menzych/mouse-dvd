@@ -1,90 +1,83 @@
-name: Build Project
-run-name: Project AutoBuilder
-on: [pull_request, push]
+name: Build and Test Project
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
 jobs:
-  Build-Windows:
-    runs-on: windows-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.13.7
-      uses: actions/setup-python@v5 
-      with:
-        python-version: "3.13.7"
-        architecture: "x64"
-        cache: "pip"
-
-    - name: Install Requirements
-      run: "pip install -r requirements.txt"
-
-    - name: Compile Project
-      run: "python -m nuitka --mode=onefile --output-dir output --output-filename windows_amd64_{{ github.sha }} --deployment dvd-mouse.pyw"
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: windows_amd64_{{ github.sha }}
-        path: output/windows_amd64_{{ github.sha }}
-
-    - name: Delete garbage
-      run: "rm output/windows_amd64_{{ github.sha }}"
-
-  Build-MacOS:
-    runs-on: macos-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-  
-    - name: Set up Python 3.13.7
-      uses: actions/setup-python@v5 
-      with:
-        python-version: "3.13.7"
-        architecture: "arm64"
-        cache: "pip"
-  
-    - name: Install Requirements
-      run: "pip install -r requirements.txt"
-
-    - name: Compile Project
-      run: "python -m nuitka --mode=onefile --output-dir output --output-filename macOS_arm64_{{ github.sha }} --deployment dvd-mouse.pyw"
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: macos_arm64_{{ github.sha }}
-        path: output/macos_arm64_{{ github.sha }}
-
-    - name: Delete garbage
-      run: "rm output/macos_arm64_{{ github.sha }}"
-
-  Build-Linux:
+  lint-and-test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.7"
+      - name: Install Lint/Test tools
+        run: pip install flake8 pytest
+      - name: Lint
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Run Tests
+        run: pytest
+
+  build:
+    needs: lint-and-test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: windows_amd64
+            arch: x64
+          - os: macos-latest
+            artifact_name: macOS_arm64
+            arch: arm64
+          - os: ubuntu-latest
+            artifact_name: linux_amd64
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-  
-    - name: Set up Python 3.13.7
-      uses: actions/setup-python@v5 
-      with:
-        python-version: "3.13.7"
-        architecture: "x64"
-        cache: "pip"
-  
-    - name: Install Requirements
-      run: "pip install -r requirements.txt"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Compile Project
-      run: "python -m nuitka --mode=onefile --output-dir output --output-filename linux_amd64_{{ github.sha }} --deployment dvd-mouse.pyw"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.7"
+          architecture: ${{ matrix.arch }}
+          cache: "pip"
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: linux_amd64_{{ github.sha }}
-        path: output/linux_amd64_{{ github.sha }}
+      - name: Install Requirements
+        run: |
+          pip install -r requirements.txt
+          pip install nuitka
 
-    - name: Delete garbage
-      run: "rm output/linux_amd64_{{ github.sha }}"
+      - name: Compile Project
+        run: python -m nuitka --mode=onefile --output-dir=output --output-filename=${{ matrix.artifact_name }}_${{ github.sha }} --deployment dvd-mouse.pyw
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}_bin
+          path: output/
+
+  notify:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send Telegram notification
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            📢 *CI/CD Report*
+            📦 Проект: ${{ github.repository }}
+            🚀 Статус: ${{ needs.build.result == 'success' && '✅ Все сборки готовы' || '❌ Произошла ошибка' }}
+            👤 Автор: ${{ github.actor }}
+            🔗 [Логи сборки](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          format: markdown
